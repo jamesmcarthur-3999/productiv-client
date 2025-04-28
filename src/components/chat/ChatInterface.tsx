@@ -7,12 +7,11 @@ import {
   Paper,
   CircularProgress,
   Divider,
-  Card,
-  CardContent,
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import ReactMarkdown from 'react-markdown';
 import claudeService, { ChatMessage } from '../../services/claude';
+import { useMCPTools } from '../../context/MCPToolContext';
 
 interface ChatInterfaceProps {
   spaceId?: number;
@@ -26,6 +25,7 @@ const ChatInterface = ({ spaceId, initialMessages = [], onMessageSent }: ChatInt
   const [isLoading, setIsLoading] = useState(false);
   const [streamedResponse, setStreamedResponse] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { getToolsForSpace } = useMCPTools();
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -51,12 +51,19 @@ const ChatInterface = ({ spaceId, initialMessages = [], onMessageSent }: ChatInt
     setStreamedResponse('');
 
     try {
+      // Get available MCP tools for the current space
+      const availableTools = spaceId ? getToolsForSpace(
+        // Get space name from context based on spaceId
+        messages[0]?.content || 'default'
+      ) : [];
+
       // Start streaming response
       await claudeService.streamMessage(
         [...messages, userMessage],
         (chunk) => {
           setStreamedResponse((prev) => prev + chunk);
-        }
+        },
+        spaceId
       );
 
       // After streaming is complete, add the assistant message to the messages array
@@ -97,7 +104,12 @@ const ChatInterface = ({ spaceId, initialMessages = [], onMessageSent }: ChatInt
       {/* Messages area */}
       <Box flex={1} p={2} overflow="auto" sx={{ maxHeight: 'calc(100vh - 200px)' }}>
         {messages.map((message, index) => (
-          <Box key={index} mb={2} display="flex" justifyContent={message.role === 'user' ? 'flex-end' : 'flex-start'}>
+          <Box 
+            key={index} 
+            mb={2} 
+            display="flex" 
+            justifyContent={message.role === 'user' ? 'flex-end' : 'flex-start'}
+          >
             <Paper
               elevation={1}
               sx={{
