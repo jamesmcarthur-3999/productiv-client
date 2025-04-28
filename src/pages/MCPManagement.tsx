@@ -28,6 +28,8 @@ import {
   Alert,
   FormControlLabel,
   Switch,
+  Tooltip,
+  LinearProgress,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -35,11 +37,13 @@ import EditIcon from '@mui/icons-material/Edit';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import StorageIcon from '@mui/icons-material/Storage';
+import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import { useMCPTools } from '../context/MCPToolContext';
 import { useSpaces } from '../context/SpaceContext';
 import githubService from '../services/github';
+import mcpManager from '../services/mcpManager';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -63,11 +67,21 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
+interface HealthCheckResult {
+  id: number;
+  name: string;
+  healthy: boolean | null;
+  error?: any;
+  status?: string;
+}
+
 const MCPManagement = () => {
   const { tools: mcpTools, installTool, uninstallTool, updateToolStatus, updateToolConfig, updateToolSpaces, isLoading, error } = useMCPTools();
   const { spaces } = useSpaces();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [healthCheckLoading, setHealthCheckLoading] = useState(false);
+  const [healthCheckResults, setHealthCheckResults] = useState<HealthCheckResult[]>([]);
   const [tabValue, setTabValue] = useState(0);
   const [editingTool, setEditingTool] = useState<any | null>(null);
   const [availableMCPTools, setAvailableMCPTools] = useState<any[]>([]);
@@ -93,52 +107,104 @@ const MCPManagement = () => {
     const loadAvailableTools = async () => {
       try {
         setLoading(true);
-        // In a real app, this would fetch from the modelcontextprotocol/servers repository
-        // For now, we'll use mock data
-        const mockTools = [
-          {
-            name: 'Postgres Database',
-            description: 'Read-only database access with schema inspection capabilities',
-            source: 'github',
-            sourceUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/postgres',
-            official: true,
-            category: 'Database',
-          },
-          {
-            name: 'Brave Search',
-            description: 'Web and local search using Brave\'s Search API',
-            source: 'github',
-            sourceUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/brave-search',
-            official: true,
-            category: 'Search',
-          },
-          {
-            name: 'Google Drive',
-            description: 'File access and search capabilities for Google Drive',
-            source: 'github',
-            sourceUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/gdrive',
-            official: true,
-            category: 'File Storage',
-          },
-          {
-            name: 'Filesystem',
-            description: 'Secure file operations with configurable access controls',
-            source: 'github',
-            sourceUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem',
-            official: true,
-            category: 'File Storage',
-          },
-          {
-            name: 'Slack',
-            description: 'Channel management and messaging capabilities',
-            source: 'github',
-            sourceUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/slack',
-            official: true,
-            category: 'Communications',
-          },
-        ];
         
-        setAvailableMCPTools(mockTools);
+        // Attempt to fetch from GitHub API
+        try {
+          // You would replace this with a call to the GitHub API to fetch the 
+          // modelcontextprotocol/servers repository contents
+          const repoContents = await githubService.getRepositoryContents(
+            'modelcontextprotocol', 
+            'servers', 
+            'src'
+          );
+          
+          // Map repository contents to available tools
+          if (Array.isArray(repoContents)) {
+            const serverTools = repoContents
+              .filter((item: any) => item.type === 'dir')
+              .map((dir: any) => ({
+                name: dir.name.charAt(0).toUpperCase() + dir.name.slice(1).replace(/-/g, ' '),
+                description: `Official MCP server for ${dir.name}`,
+                source: 'github',
+                sourceUrl: `https://github.com/modelcontextprotocol/servers/tree/main/src/${dir.name}`,
+                official: true,
+                category: 'Official',
+              }));
+            
+            setAvailableMCPTools(serverTools);
+          }
+        } catch (error) {
+          console.error('Error fetching from GitHub, using local data:', error);
+          // Fallback to static data if GitHub API fails
+          const staticTools = [
+            {
+              name: 'Postgres Database',
+              description: 'Read-only database access with schema inspection capabilities',
+              source: 'github',
+              sourceUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/postgres',
+              official: true,
+              category: 'Database',
+            },
+            {
+              name: 'Brave Search',
+              description: 'Web and local search using Brave\'s Search API',
+              source: 'github',
+              sourceUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/brave-search',
+              official: true,
+              category: 'Search',
+            },
+            {
+              name: 'Google Drive',
+              description: 'File access and search capabilities for Google Drive',
+              source: 'github',
+              sourceUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/gdrive',
+              official: true,
+              category: 'File Storage',
+            },
+            {
+              name: 'Filesystem',
+              description: 'Secure file operations with configurable access controls',
+              source: 'github',
+              sourceUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem',
+              official: true,
+              category: 'File Storage',
+            },
+            {
+              name: 'Slack',
+              description: 'Channel management and messaging capabilities',
+              source: 'github',
+              sourceUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/slack',
+              official: true,
+              category: 'Communications',
+            },
+            {
+              name: 'GitHub',
+              description: 'Repository management, file operations, and GitHub API integration',
+              source: 'github',
+              sourceUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/github',
+              official: true,
+              category: 'Development',
+            },
+            {
+              name: 'Memory',
+              description: 'Knowledge graph-based persistent memory system',
+              source: 'github',
+              sourceUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/memory',
+              official: true,
+              category: 'AI Utility',
+            },
+            {
+              name: 'Time',
+              description: 'Time and timezone conversion capabilities',
+              source: 'github',
+              sourceUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/time',
+              official: true,
+              category: 'Utility',
+            },
+          ];
+          
+          setAvailableMCPTools(staticTools);
+        }
       } catch (err) {
         console.error('Error loading available MCP tools:', err);
       } finally {
@@ -283,6 +349,33 @@ const MCPManagement = () => {
     }
   };
 
+  const handleRunHealthCheck = async () => {
+    setHealthCheckLoading(true);
+    try {
+      const results = await mcpManager.checkToolsHealth();
+      setHealthCheckResults(results);
+    } catch (error) {
+      console.error('Error running health check:', error);
+    } finally {
+      setHealthCheckLoading(false);
+    }
+  };
+
+  const getHealthCheckStatus = (results: HealthCheckResult[]) => {
+    if (results.length === 0) return { total: 0, healthy: 0, percentage: 0 };
+    
+    const activeTools = results.filter(r => r.healthy !== null);
+    const healthyTools = results.filter(r => r.healthy === true);
+    
+    return {
+      total: activeTools.length,
+      healthy: healthyTools.length,
+      percentage: activeTools.length > 0 ? Math.round((healthyTools.length / activeTools.length) * 100) : 0
+    };
+  };
+
+  const healthStatus = getHealthCheckStatus(healthCheckResults);
+
   return (
     <div>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
@@ -303,6 +396,59 @@ const MCPManagement = () => {
         </Alert>
       )}
 
+      {healthCheckResults.length > 0 && (
+        <Box mb={3}>
+          <Card>
+            <CardContent>
+              <Box display="flex" alignItems="center" mb={2}>
+                <HealthAndSafetyIcon color="primary" sx={{ mr: 1 }} />
+                <Typography variant="h6">MCP Tool Health</Typography>
+                <Box ml="auto">
+                  <Chip 
+                    label={`${healthStatus.healthy}/${healthStatus.total} Tools Healthy (${healthStatus.percentage}%)`}
+                    color={healthStatus.percentage === 100 ? "success" : healthStatus.percentage > 50 ? "warning" : "error"}
+                  />
+                </Box>
+              </Box>
+              
+              <LinearProgress 
+                variant="determinate" 
+                value={healthStatus.percentage} 
+                color={healthStatus.percentage === 100 ? "success" : healthStatus.percentage > 50 ? "warning" : "error"}
+                sx={{ mb: 2, height: 10, borderRadius: 5 }}
+              />
+              
+              <Grid container spacing={1}>
+                {healthCheckResults.map((result) => (
+                  <Grid item xs={12} sm={6} md={4} lg={3} key={result.id}>
+                    <Chip
+                      icon={result.healthy === true ? <CheckCircleOutlineIcon /> : 
+                            result.healthy === false ? <ErrorOutlineIcon /> : null}
+                      label={result.name}
+                      color={result.healthy === true ? "success" : 
+                             result.healthy === false ? "error" : "default"}
+                      variant="outlined"
+                      sx={{ width: '100%', justifyContent: 'flex-start' }}
+                    />
+                  </Grid>
+                ))}
+              </Grid>
+            </CardContent>
+            <CardActions>
+              <Button 
+                variant="outlined" 
+                color="primary" 
+                onClick={handleRunHealthCheck}
+                disabled={healthCheckLoading}
+                startIcon={healthCheckLoading ? <CircularProgress size={18} /> : <RefreshIcon />}
+              >
+                Refresh Health Check
+              </Button>
+            </CardActions>
+          </Card>
+        </Box>
+      )}
+
       <Paper sx={{ mb: 3 }}>
         <Tabs
           value={tabValue}
@@ -317,6 +463,18 @@ const MCPManagement = () => {
         </Tabs>
 
         <TabPanel value={tabValue} index={0}>
+          <Box display="flex" justifyContent="flex-end" mb={2}>
+            <Button
+              variant="outlined"
+              color="primary"
+              startIcon={healthCheckLoading ? <CircularProgress size={18} /> : <HealthAndSafetyIcon />}
+              onClick={handleRunHealthCheck}
+              disabled={healthCheckLoading || mcpTools.length === 0}
+            >
+              Run Health Check
+            </Button>
+          </Box>
+
           {isLoading ? (
             <Box display="flex" justifyContent="center" p={4}>
               <CircularProgress />
@@ -386,10 +544,28 @@ const MCPManagement = () => {
                         Assigned to Spaces:
                       </Typography>
                       <Box display="flex" flexWrap="wrap" gap={1} mb={2}>
-                        {tool.spaces.map((space: string) => (
-                          <Chip key={space} label={space} size="small" />
-                        ))}
+                        {tool.spaces.length > 0 ? (
+                          tool.spaces.map((space: string) => (
+                            <Chip key={space} label={space} size="small" />
+                          ))
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            Not assigned to any spaces
+                          </Typography>
+                        )}
                       </Box>
+                      
+                      {tool.processId && (
+                        <Box mt={2}>
+                          <Chip 
+                            icon={<StorageIcon />} 
+                            label={`Process ID: ${tool.processId}`} 
+                            size="small" 
+                            color="info" 
+                            variant="outlined"
+                          />
+                        </Box>
+                      )}
                     </CardContent>
                     <CardActions>
                       <FormControlLabel
@@ -409,7 +585,12 @@ const MCPManagement = () => {
                       >
                         Configure
                       </Button>
-                      <IconButton color="error" size="small" onClick={() => handleDeleteTool(tool.id)}>
+                      <IconButton 
+                        color="error" 
+                        size="small" 
+                        onClick={() => handleDeleteTool(tool.id)}
+                        aria-label="delete"
+                      >
                         <DeleteIcon />
                       </IconButton>
                     </CardActions>
@@ -644,7 +825,13 @@ const MCPManagement = () => {
                   <TextField
                     label="Parameter Name"
                     value={key}
-                    disabled
+                    onChange={(e) => {
+                      const newConfig = { ...formData.config };
+                      const newValue = newConfig[key];
+                      delete newConfig[key];
+                      newConfig[e.target.value] = newValue;
+                      setFormData(prev => ({ ...prev, config: newConfig }));
+                    }}
                     sx={{ flexGrow: 1 }}
                   />
                   <TextField
