@@ -4,17 +4,12 @@ import {
   Paper,
   Button,
   Grid,
-  Card,
-  CardContent,
-  CardActions,
   TextField,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  IconButton,
   Box,
-  Chip,
   FormControl,
   InputLabel,
   Select,
@@ -24,26 +19,19 @@ import {
   CircularProgress,
   Tabs,
   Tab,
-  Divider,
   Alert,
-  FormControlLabel,
-  Switch,
-  Tooltip,
-  LinearProgress,
+  Stepper,
+  Step,
+  StepLabel,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
-import DeleteIcon from '@mui/icons-material/Delete';
-import EditIcon from '@mui/icons-material/Edit';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import GitHubIcon from '@mui/icons-material/GitHub';
-import StorageIcon from '@mui/icons-material/Storage';
-import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import { useMCPTools } from '../context/MCPToolContext';
 import { useSpaces } from '../context/SpaceContext';
+import MCPToolCard from '../components/mcp/MCPToolCard';
 import githubService from '../services/github';
-import mcpManager from '../services/mcpManager';
+import mcpService from '../services/mcpService';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -67,24 +55,21 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
-interface HealthCheckResult {
-  id: number;
-  name: string;
-  healthy: boolean | null;
-  error?: any;
-  status?: string;
-}
-
 const MCPManagement = () => {
   const { tools: mcpTools, installTool, uninstallTool, updateToolStatus, updateToolConfig, updateToolSpaces, isLoading, error } = useMCPTools();
   const { spaces } = useSpaces();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [healthCheckLoading, setHealthCheckLoading] = useState(false);
-  const [healthCheckResults, setHealthCheckResults] = useState<HealthCheckResult[]>([]);
   const [tabValue, setTabValue] = useState(0);
   const [editingTool, setEditingTool] = useState<any | null>(null);
   const [availableMCPTools, setAvailableMCPTools] = useState<any[]>([]);
+  const [installationStep, setInstallationStep] = useState(0);
+  const [validationStatus, setValidationStatus] = useState<{
+    isValid: boolean;
+    message: string;
+  }>({ isValid: false, message: '' });
+  
+  // Form state
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -107,104 +92,52 @@ const MCPManagement = () => {
     const loadAvailableTools = async () => {
       try {
         setLoading(true);
+        // In a real app, this would fetch from GitHub or other repositories
+        // For now, we'll use mock data
+        const mockTools = [
+          {
+            name: 'Postgres Database',
+            description: 'Read-only database access with schema inspection capabilities',
+            source: 'github',
+            sourceUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/postgres',
+            official: true,
+            category: 'Database',
+          },
+          {
+            name: 'Brave Search',
+            description: "Web and local search using Brave's Search API",
+            source: 'github',
+            sourceUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/brave-search',
+            official: true,
+            category: 'Search',
+          },
+          {
+            name: 'Google Drive',
+            description: 'File access and search capabilities for Google Drive',
+            source: 'github',
+            sourceUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/gdrive',
+            official: true,
+            category: 'File Storage',
+          },
+          {
+            name: 'Filesystem',
+            description: 'Secure file operations with configurable access controls',
+            source: 'github',
+            sourceUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem',
+            official: true,
+            category: 'File Storage',
+          },
+          {
+            name: 'Slack',
+            description: 'Channel management and messaging capabilities',
+            source: 'github',
+            sourceUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/slack',
+            official: true,
+            category: 'Communications',
+          },
+        ];
         
-        // Attempt to fetch from GitHub API
-        try {
-          // You would replace this with a call to the GitHub API to fetch the 
-          // modelcontextprotocol/servers repository contents
-          const repoContents = await githubService.getRepositoryContents(
-            'modelcontextprotocol', 
-            'servers', 
-            'src'
-          );
-          
-          // Map repository contents to available tools
-          if (Array.isArray(repoContents)) {
-            const serverTools = repoContents
-              .filter((item: any) => item.type === 'dir')
-              .map((dir: any) => ({
-                name: dir.name.charAt(0).toUpperCase() + dir.name.slice(1).replace(/-/g, ' '),
-                description: `Official MCP server for ${dir.name}`,
-                source: 'github',
-                sourceUrl: `https://github.com/modelcontextprotocol/servers/tree/main/src/${dir.name}`,
-                official: true,
-                category: 'Official',
-              }));
-            
-            setAvailableMCPTools(serverTools);
-          }
-        } catch (error) {
-          console.error('Error fetching from GitHub, using local data:', error);
-          // Fallback to static data if GitHub API fails
-          const staticTools = [
-            {
-              name: 'Postgres Database',
-              description: 'Read-only database access with schema inspection capabilities',
-              source: 'github',
-              sourceUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/postgres',
-              official: true,
-              category: 'Database',
-            },
-            {
-              name: 'Brave Search',
-              description: 'Web and local search using Brave\'s Search API',
-              source: 'github',
-              sourceUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/brave-search',
-              official: true,
-              category: 'Search',
-            },
-            {
-              name: 'Google Drive',
-              description: 'File access and search capabilities for Google Drive',
-              source: 'github',
-              sourceUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/gdrive',
-              official: true,
-              category: 'File Storage',
-            },
-            {
-              name: 'Filesystem',
-              description: 'Secure file operations with configurable access controls',
-              source: 'github',
-              sourceUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem',
-              official: true,
-              category: 'File Storage',
-            },
-            {
-              name: 'Slack',
-              description: 'Channel management and messaging capabilities',
-              source: 'github',
-              sourceUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/slack',
-              official: true,
-              category: 'Communications',
-            },
-            {
-              name: 'GitHub',
-              description: 'Repository management, file operations, and GitHub API integration',
-              source: 'github',
-              sourceUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/github',
-              official: true,
-              category: 'Development',
-            },
-            {
-              name: 'Memory',
-              description: 'Knowledge graph-based persistent memory system',
-              source: 'github',
-              sourceUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/memory',
-              official: true,
-              category: 'AI Utility',
-            },
-            {
-              name: 'Time',
-              description: 'Time and timezone conversion capabilities',
-              source: 'github',
-              sourceUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/time',
-              official: true,
-              category: 'Utility',
-            },
-          ];
-          
-          setAvailableMCPTools(staticTools);
-        }
+        setAvailableMCPTools(mockTools);
       } catch (err) {
         console.error('Error loading available MCP tools:', err);
       } finally {
@@ -220,6 +153,8 @@ const MCPManagement = () => {
   };
 
   const handleOpenDialog = (tool?: any) => {
+    setInstallationStep(0);
+    
     if (tool) {
       setEditingTool(tool);
       setFormData({
@@ -230,6 +165,11 @@ const MCPManagement = () => {
         spaces: [...(tool.spaces || [])],
         config: tool.config ? { ...tool.config } : {},
       });
+      
+      // If editing an existing tool, skip to configuration step
+      if (tool.id) {
+        setInstallationStep(1);
+      }
     } else {
       setEditingTool(null);
       setFormData({
@@ -241,12 +181,15 @@ const MCPManagement = () => {
         config: {},
       });
     }
+    
     setDialogOpen(true);
   };
 
   const handleCloseDialog = () => {
     setDialogOpen(false);
     setInstallationStatus({ show: false, message: '' });
+    setValidationStatus({ isValid: false, message: '' });
+    setInstallationStep(0);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -288,9 +231,62 @@ const MCPManagement = () => {
     delete newConfig[key];
     setFormData((prev) => ({ ...prev, config: newConfig }));
   };
+  
+  const handleNextStep = async () => {
+    // Validate current step before proceeding
+    if (installationStep === 0) {
+      // Validate repository URL
+      if (!formData.sourceUrl) {
+        setValidationStatus({
+          isValid: false,
+          message: 'Please enter a valid repository URL',
+        });
+        return;
+      }
+      
+      try {
+        setLoading(true);
+        // In a real app, this would validate the repository
+        // For now, we'll simulate validation
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Auto-fill name and description if not yet provided
+        if (!formData.name) {
+          const urlParts = formData.sourceUrl.split('/');
+          const repoName = urlParts[urlParts.length - 1] || urlParts[urlParts.length - 2];
+          setFormData(prev => ({
+            ...prev,
+            name: repoName.charAt(0).toUpperCase() + repoName.slice(1).replace(/-/g, ' '),
+            description: `MCP tool for ${repoName.replace(/-/g, ' ')}`,
+          }));
+        }
+        
+        setValidationStatus({
+          isValid: true,
+          message: 'Repository validated successfully!',
+        });
+        setInstallationStep(1);
+      } catch (error) {
+        setValidationStatus({
+          isValid: false,
+          message: 'Invalid repository URL or repository does not exist',
+        });
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      // Proceed to next step
+      setInstallationStep(prev => prev + 1);
+    }
+  };
+  
+  const handlePrevStep = () => {
+    setInstallationStep(prev => Math.max(0, prev - 1));
+  };
 
   const handleSaveTool = async () => {
     setLoading(true);
+    
     try {
       if (editingTool && editingTool.id) {
         // Update existing tool
@@ -312,12 +308,28 @@ const MCPManagement = () => {
           spaces: formData.spaces,
           config: formData.config,
         });
+        
+        // Register with MCP service
+        await mcpService.installServer(
+          formData.name,
+          `http://localhost:3010/mcp/${Date.now()}`,
+          formData.spaces.map(space => {
+            const spaceObj = spaces.find(s => s.name === space);
+            return spaceObj?.id || 0;
+          }).filter(id => id !== 0)
+        );
+        
         setInstallationStatus({
           show: true,
           success: true,
           message: 'MCP tool installed successfully!',
         });
       }
+      
+      // Close dialog after successful installation
+      setTimeout(() => {
+        handleCloseDialog();
+      }, 1500);
     } catch (err) {
       console.error('Error saving MCP tool:', err);
       setInstallationStatus({
@@ -349,32 +361,13 @@ const MCPManagement = () => {
     }
   };
 
-  const handleRunHealthCheck = async () => {
-    setHealthCheckLoading(true);
-    try {
-      const results = await mcpManager.checkToolsHealth();
-      setHealthCheckResults(results);
-    } catch (error) {
-      console.error('Error running health check:', error);
-    } finally {
-      setHealthCheckLoading(false);
-    }
-  };
-
-  const getHealthCheckStatus = (results: HealthCheckResult[]) => {
-    if (results.length === 0) return { total: 0, healthy: 0, percentage: 0 };
-    
-    const activeTools = results.filter(r => r.healthy !== null);
-    const healthyTools = results.filter(r => r.healthy === true);
-    
-    return {
-      total: activeTools.length,
-      healthy: healthyTools.length,
-      percentage: activeTools.length > 0 ? Math.round((healthyTools.length / activeTools.length) * 100) : 0
-    };
-  };
-
-  const healthStatus = getHealthCheckStatus(healthCheckResults);
+  // Installation steps
+  const steps = [
+    'Select Repository',
+    'Configure Tool',
+    'Assign to Spaces',
+    'Install & Test',
+  ];
 
   return (
     <div>
@@ -396,59 +389,6 @@ const MCPManagement = () => {
         </Alert>
       )}
 
-      {healthCheckResults.length > 0 && (
-        <Box mb={3}>
-          <Card>
-            <CardContent>
-              <Box display="flex" alignItems="center" mb={2}>
-                <HealthAndSafetyIcon color="primary" sx={{ mr: 1 }} />
-                <Typography variant="h6">MCP Tool Health</Typography>
-                <Box ml="auto">
-                  <Chip 
-                    label={`${healthStatus.healthy}/${healthStatus.total} Tools Healthy (${healthStatus.percentage}%)`}
-                    color={healthStatus.percentage === 100 ? "success" : healthStatus.percentage > 50 ? "warning" : "error"}
-                  />
-                </Box>
-              </Box>
-              
-              <LinearProgress 
-                variant="determinate" 
-                value={healthStatus.percentage} 
-                color={healthStatus.percentage === 100 ? "success" : healthStatus.percentage > 50 ? "warning" : "error"}
-                sx={{ mb: 2, height: 10, borderRadius: 5 }}
-              />
-              
-              <Grid container spacing={1}>
-                {healthCheckResults.map((result) => (
-                  <Grid item xs={12} sm={6} md={4} lg={3} key={result.id}>
-                    <Chip
-                      icon={result.healthy === true ? <CheckCircleOutlineIcon /> : 
-                            result.healthy === false ? <ErrorOutlineIcon /> : null}
-                      label={result.name}
-                      color={result.healthy === true ? "success" : 
-                             result.healthy === false ? "error" : "default"}
-                      variant="outlined"
-                      sx={{ width: '100%', justifyContent: 'flex-start' }}
-                    />
-                  </Grid>
-                ))}
-              </Grid>
-            </CardContent>
-            <CardActions>
-              <Button 
-                variant="outlined" 
-                color="primary" 
-                onClick={handleRunHealthCheck}
-                disabled={healthCheckLoading}
-                startIcon={healthCheckLoading ? <CircularProgress size={18} /> : <RefreshIcon />}
-              >
-                Refresh Health Check
-              </Button>
-            </CardActions>
-          </Card>
-        </Box>
-      )}
-
       <Paper sx={{ mb: 3 }}>
         <Tabs
           value={tabValue}
@@ -463,18 +403,6 @@ const MCPManagement = () => {
         </Tabs>
 
         <TabPanel value={tabValue} index={0}>
-          <Box display="flex" justifyContent="flex-end" mb={2}>
-            <Button
-              variant="outlined"
-              color="primary"
-              startIcon={healthCheckLoading ? <CircularProgress size={18} /> : <HealthAndSafetyIcon />}
-              onClick={handleRunHealthCheck}
-              disabled={healthCheckLoading || mcpTools.length === 0}
-            >
-              Run Health Check
-            </Button>
-          </Box>
-
           {isLoading ? (
             <Box display="flex" justifyContent="center" p={4}>
               <CircularProgress />
@@ -500,101 +428,12 @@ const MCPManagement = () => {
             <Grid container spacing={3}>
               {mcpTools.map((tool) => (
                 <Grid item xs={12} md={6} lg={4} key={tool.id}>
-                  <Card>
-                    <CardContent>
-                      <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
-                        <Typography variant="h6">{tool.name}</Typography>
-                        <Box>
-                          {tool.status === 'active' ? (
-                            <Chip
-                              icon={<CheckCircleOutlineIcon />}
-                              label="Active"
-                              size="small"
-                              color="success"
-                            />
-                          ) : tool.status === 'error' ? (
-                            <Chip
-                              icon={<ErrorOutlineIcon />}
-                              label="Error"
-                              size="small"
-                              color="error"
-                            />
-                          ) : (
-                            <Chip label="Inactive" size="small" color="default" />
-                          )}
-                        </Box>
-                      </Box>
-
-                      <Typography variant="body2" color="textSecondary" paragraph>
-                        {tool.description}
-                      </Typography>
-
-                      <Box mb={2}>
-                        <Typography variant="subtitle2" gutterBottom>
-                          Source: {tool.source === 'github' ? 'GitHub' : 'Local'}
-                        </Typography>
-                        {tool.sourceUrl && (
-                          <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
-                            {tool.sourceUrl}
-                          </Typography>
-                        )}
-                      </Box>
-
-                      <Typography variant="subtitle2" gutterBottom>
-                        Assigned to Spaces:
-                      </Typography>
-                      <Box display="flex" flexWrap="wrap" gap={1} mb={2}>
-                        {tool.spaces.length > 0 ? (
-                          tool.spaces.map((space: string) => (
-                            <Chip key={space} label={space} size="small" />
-                          ))
-                        ) : (
-                          <Typography variant="body2" color="text.secondary">
-                            Not assigned to any spaces
-                          </Typography>
-                        )}
-                      </Box>
-                      
-                      {tool.processId && (
-                        <Box mt={2}>
-                          <Chip 
-                            icon={<StorageIcon />} 
-                            label={`Process ID: ${tool.processId}`} 
-                            size="small" 
-                            color="info" 
-                            variant="outlined"
-                          />
-                        </Box>
-                      )}
-                    </CardContent>
-                    <CardActions>
-                      <FormControlLabel
-                        control={
-                          <Switch
-                            checked={tool.status === 'active'}
-                            onChange={() => handleToolStatusToggle(tool.id, tool.status)}
-                            color="primary"
-                          />
-                        }
-                        label={tool.status === 'active' ? 'Enabled' : 'Disabled'}
-                      />
-                      <Button
-                        size="small"
-                        startIcon={<EditIcon />}
-                        onClick={() => handleOpenDialog(tool)}
-                      >
-                        Configure
-                      </Button>
-                      <IconButton 
-                        color="error" 
-                        size="small" 
-                        onClick={() => handleDeleteTool(tool.id)}
-                        aria-label="delete"
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </CardActions>
-                  </Card>
+                  <MCPToolCard
+                    tool={tool}
+                    onEdit={() => handleOpenDialog(tool)}
+                    onDelete={handleDeleteTool}
+                    onStatusToggle={handleToolStatusToggle}
+                  />
                 </Grid>
               ))}
             </Grid>
@@ -603,7 +442,8 @@ const MCPManagement = () => {
 
         <TabPanel value={tabValue} index={1}>
           <Alert severity="info" sx={{ mb: 3 }}>
-            Browse and install MCP tools from our catalog or GitHub repositories.
+            Browse and install MCP tools from the official catalog or GitHub repositories.
+            These tools implement the Model Context Protocol (MCP) to extend Claude's capabilities.
           </Alert>
           {loading ? (
             <Box display="flex" justifyContent="center" p={4}>
@@ -613,34 +453,54 @@ const MCPManagement = () => {
             <Grid container spacing={3}>
               {availableMCPTools.map((tool, index) => (
                 <Grid item xs={12} md={6} lg={4} key={index}>
-                  <Card>
-                    <CardContent>
-                      <Typography variant="h6" gutterBottom>
-                        {tool.name}
+                  <Paper elevation={2} sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column' }}>
+                    <Typography variant="h6" gutterBottom>
+                      {tool.name}
+                    </Typography>
+                    <Typography variant="body2" color="textSecondary" paragraph sx={{ flexGrow: 1 }}>
+                      {tool.description}
+                    </Typography>
+                    
+                    <Box display="flex" alignItems="center" mb={2}>
+                      <GitHubIcon fontSize="small" sx={{ mr: 1 }} />
+                      <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
+                        {tool.sourceUrl.split('/').slice(3).join('/')}
                       </Typography>
-                      <Typography variant="body2" color="textSecondary" paragraph>
-                        {tool.description}
-                      </Typography>
-                      <Box display="flex" alignItems="center" mb={1}>
-                        <GitHubIcon fontSize="small" sx={{ mr: 1 }} />
-                        <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
-                          {tool.sourceUrl.split('/').slice(3).join('/')}
+                    </Box>
+                    
+                    <Box display="flex" gap={1} mb={2}>
+                      {tool.official && (
+                        <Typography variant="caption" sx={{ 
+                          bgcolor: 'primary.main', 
+                          color: 'white',
+                          py: 0.5,
+                          px: 1,
+                          borderRadius: 1
+                        }}>
+                          Official
                         </Typography>
-                      </Box>
-                      {tool.official && <Chip label="Official" size="small" color="primary" sx={{ mr: 1 }} />}
-                      {tool.category && <Chip label={tool.category} size="small" />}
-                    </CardContent>
-                    <CardActions>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        color="primary"
-                        onClick={() => handleOpenDialog(tool)}
-                      >
-                        Install
-                      </Button>
-                    </CardActions>
-                  </Card>
+                      )}
+                      {tool.category && (
+                        <Typography variant="caption" sx={{ 
+                          bgcolor: 'grey.200',
+                          py: 0.5,
+                          px: 1,
+                          borderRadius: 1
+                        }}>
+                          {tool.category}
+                        </Typography>
+                      )}
+                    </Box>
+                    
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      onClick={() => handleOpenDialog(tool)}
+                      fullWidth
+                    >
+                      Install
+                    </Button>
+                  </Paper>
                 </Grid>
               ))}
             </Grid>
@@ -653,7 +513,8 @@ const MCPManagement = () => {
               MCP Server Configuration
             </Typography>
             <Typography variant="body2" color="textSecondary" paragraph>
-              Configure global settings for the MCP tool management system, including SSH keys, default installation paths, and logging options.
+              Configure global settings for the MCP tool management system. 
+              These settings apply to all installed MCP servers.
             </Typography>
             
             <Grid container spacing={3} sx={{ mt: 2 }}>
@@ -675,27 +536,31 @@ const MCPManagement = () => {
                   margin="normal"
                 />
               </Grid>
-              <Grid item xs={12}>
-                <FormControlLabel
-                  control={<Switch defaultChecked />}
-                  label="Enable detailed logging"
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="MCP Server Port Range"
+                  defaultValue="3010-3050"
+                  helperText="Port range for MCP servers"
+                  margin="normal"
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Default Claude API Model"
+                  defaultValue="claude-3-opus-20240229"
+                  helperText="Claude model used for MCP integration"
+                  margin="normal"
                 />
               </Grid>
               <Grid item xs={12}>
-                <FormControlLabel
-                  control={<Switch defaultChecked />}
-                  label="Automatically check for updates"
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <FormControlLabel
-                  control={<Switch />}
-                  label="Require authentication for each MCP tool"
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <Button variant="contained" color="primary">
-                  Save Settings
+                <Button 
+                  variant="contained" 
+                  color="primary"
+                  startIcon={<RefreshIcon />}
+                >
+                  Restart All MCP Servers
                 </Button>
               </Grid>
             </Grid>
@@ -709,6 +574,15 @@ const MCPManagement = () => {
           {editingTool && editingTool.id ? 'Edit MCP Tool' : 'Install MCP Tool'}
         </DialogTitle>
         <DialogContent dividers>
+          {/* Installation Steps */}
+          <Stepper activeStep={installationStep} sx={{ mb: 4 }}>
+            {steps.map((label, index) => (
+              <Step key={label}>
+                <StepLabel>{label}</StepLabel>
+              </Step>
+            ))}
+          </Stepper>
+          
           {installationStatus.show && (
             <Alert
               severity={installationStatus.success ? 'success' : 'error'}
@@ -717,69 +591,158 @@ const MCPManagement = () => {
               {installationStatus.message}
             </Alert>
           )}
-
-          <Grid container spacing={2}>
-            <Grid item xs={12}>
-              <TextField
-                name="name"
-                label="Tool Name"
-                value={formData.name}
-                onChange={handleInputChange}
-                fullWidth
-                required
-                margin="normal"
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                name="description"
-                label="Description"
-                value={formData.description}
-                onChange={handleInputChange}
-                fullWidth
-                multiline
-                rows={2}
-                margin="normal"
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <FormControl fullWidth margin="normal">
-                <InputLabel id="source-label">Source Type</InputLabel>
-                <Select
-                  labelId="source-label"
-                  id="source"
-                  name="source"
-                  value={formData.source}
-                  onChange={handleSourceTypeChange}
-                  label="Source Type"
-                >
-                  <MenuItem value="github">
-                    <Box display="flex" alignItems="center">
-                      <GitHubIcon fontSize="small" sx={{ mr: 1 }} />
-                      GitHub Repository
+          
+          {/* Step 1: Select Repository */}
+          {installationStep === 0 && (
+            <Box>
+              <Typography variant="h6" gutterBottom>
+                Select MCP Tool Repository
+              </Typography>
+              <Typography variant="body2" color="textSecondary" paragraph>
+                Enter the URL of a GitHub repository containing an MCP tool. 
+                The repository should follow the Model Context Protocol standards.
+              </Typography>
+              
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={6}>
+                  <FormControl fullWidth margin="normal">
+                    <InputLabel id="source-label">Source Type</InputLabel>
+                    <Select
+                      labelId="source-label"
+                      id="source"
+                      name="source"
+                      value={formData.source}
+                      onChange={handleSourceTypeChange}
+                      label="Source Type"
+                    >
+                      <MenuItem value="github">
+                        <Box display="flex" alignItems="center">
+                          <GitHubIcon fontSize="small" sx={{ mr: 1 }} />
+                          GitHub Repository
+                        </Box>
+                      </MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    name="sourceUrl"
+                    label="GitHub Repository URL"
+                    value={formData.sourceUrl}
+                    onChange={handleInputChange}
+                    fullWidth
+                    required
+                    margin="normal"
+                    placeholder="https://github.com/username/mcp-tool"
+                    error={validationStatus.message !== '' && !validationStatus.isValid}
+                    helperText={
+                      validationStatus.message !== '' && !validationStatus.isValid
+                        ? validationStatus.message
+                        : ''
+                    }
+                  />
+                </Grid>
+              </Grid>
+              
+              {validationStatus.isValid && (
+                <Alert severity="success" sx={{ mt: 2 }}>
+                  {validationStatus.message}
+                </Alert>
+              )}
+            </Box>
+          )}
+          
+          {/* Step 2: Configure Tool */}
+          {installationStep === 1 && (
+            <Box>
+              <Typography variant="h6" gutterBottom>
+                Configure MCP Tool
+              </Typography>
+              <Typography variant="body2" color="textSecondary" paragraph>
+                Customize the name, description, and configuration parameters for this MCP tool.
+              </Typography>
+              
+              <Grid container spacing={2}>
+                <Grid item xs={12}>
+                  <TextField
+                    name="name"
+                    label="Tool Name"
+                    value={formData.name}
+                    onChange={handleInputChange}
+                    fullWidth
+                    required
+                    margin="normal"
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    name="description"
+                    label="Description"
+                    value={formData.description}
+                    onChange={handleInputChange}
+                    fullWidth
+                    multiline
+                    rows={2}
+                    margin="normal"
+                  />
+                </Grid>
+                
+                <Grid item xs={12}>
+                  <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
+                    Configuration Parameters
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary" paragraph>
+                    Add environment variables and configuration parameters for the MCP tool.
+                  </Typography>
+                  
+                  {Object.keys(formData.config).length === 0 && (
+                    <Alert severity="info" sx={{ mb: 2 }}>
+                      No configuration parameters defined. Click "Add Parameter" to add one.
+                    </Alert>
+                  )}
+                  
+                  {Object.entries(formData.config).map(([key, value]) => (
+                    <Box key={key} display="flex" alignItems="center" gap={2} mb={2}>
+                      <TextField
+                        label="Parameter Name"
+                        value={key}
+                        sx={{ flexGrow: 1 }}
+                      />
+                      <TextField
+                        label="Value"
+                        value={value}
+                        onChange={(e) => handleConfigChange(key, e.target.value)}
+                        type={key.toLowerCase().includes('key') || key.toLowerCase().includes('token') || key.toLowerCase().includes('secret') ? 'password' : 'text'}
+                        sx={{ flexGrow: 1 }}
+                      />
+                      <Button 
+                        color="error" 
+                        variant="outlined"
+                        onClick={() => handleRemoveConfigField(key)}
+                      >
+                        Remove
+                      </Button>
                     </Box>
-                  </MenuItem>
-                  <MenuItem value="local">
-                    <Box display="flex" alignItems="center">
-                      <StorageIcon fontSize="small" sx={{ mr: 1 }} />
-                      Local Directory
-                    </Box>
-                  </MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                name="sourceUrl"
-                label={formData.source === 'github' ? 'GitHub Repository URL' : 'Local Directory Path'}
-                value={formData.sourceUrl}
-                onChange={handleInputChange}
-                fullWidth
-                required
-                margin="normal"
-              />
-            </Grid>
-            <Grid item xs={12}>
+                  ))}
+                  
+                  <Button variant="outlined" onClick={handleAddConfigField}>
+                    Add Parameter
+                  </Button>
+                </Grid>
+              </Grid>
+            </Box>
+          )}
+          
+          {/* Step 3: Assign to Spaces */}
+          {installationStep === 2 && (
+            <Box>
+              <Typography variant="h6" gutterBottom>
+                Assign to Spaces
+              </Typography>
+              <Typography variant="body2" color="textSecondary" paragraph>
+                Select which team spaces should have access to this MCP tool.
+              </Typography>
+              
               <FormControl fullWidth margin="normal">
                 <InputLabel id="spaces-label">Assign to Spaces</InputLabel>
                 <Select
@@ -793,7 +756,20 @@ const MCPManagement = () => {
                   renderValue={(selected) => (
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                       {selected.map((value) => (
-                        <Chip key={value} label={value} size="small" />
+                        <Typography 
+                          key={value} 
+                          variant="caption" 
+                          sx={{ 
+                            bgcolor: 'primary.main', 
+                            color: 'white',
+                            py: 0.5,
+                            px: 1,
+                            borderRadius: 1,
+                            mr: 0.5
+                          }}
+                        >
+                          {value}
+                        </Typography>
                       ))}
                     </Box>
                   )}
@@ -805,67 +781,107 @@ const MCPManagement = () => {
                   ))}
                 </Select>
               </FormControl>
-            </Grid>
-            <Grid item xs={12}>
-              <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
-                Configuration Parameters
-              </Typography>
-              <Typography variant="body2" color="textSecondary" paragraph>
-                Add environment variables and configuration parameters for the MCP tool.
-              </Typography>
-
-              {Object.keys(formData.config).length === 0 && (
-                <Alert severity="info" sx={{ mb: 2 }}>
-                  No configuration parameters defined. Click "Add Parameter" to add one.
+              
+              {formData.spaces.length === 0 && (
+                <Alert severity="warning" sx={{ mt: 2 }}>
+                  This MCP tool is not assigned to any spaces. Users will not be able to access it.
                 </Alert>
               )}
-
-              {Object.entries(formData.config).map(([key, value]) => (
-                <Box key={key} display="flex" alignItems="center" gap={2} mb={2}>
-                  <TextField
-                    label="Parameter Name"
-                    value={key}
-                    onChange={(e) => {
-                      const newConfig = { ...formData.config };
-                      const newValue = newConfig[key];
-                      delete newConfig[key];
-                      newConfig[e.target.value] = newValue;
-                      setFormData(prev => ({ ...prev, config: newConfig }));
-                    }}
-                    sx={{ flexGrow: 1 }}
-                  />
-                  <TextField
-                    label="Value"
-                    value={value}
-                    onChange={(e) => handleConfigChange(key, e.target.value)}
-                    type={key.toLowerCase().includes('key') || key.toLowerCase().includes('token') || key.toLowerCase().includes('secret') ? 'password' : 'text'}
-                    sx={{ flexGrow: 1 }}
-                  />
-                  <IconButton color="error" onClick={() => handleRemoveConfigField(key)}>
-                    <DeleteIcon />
-                  </IconButton>
-                </Box>
-              ))}
-
-              <Button variant="outlined" onClick={handleAddConfigField}>
-                Add Parameter
-              </Button>
-            </Grid>
-          </Grid>
+            </Box>
+          )}
+          
+          {/* Step 4: Install & Test */}
+          {installationStep === 3 && (
+            <Box>
+              <Typography variant="h6" gutterBottom>
+                Install & Test MCP Tool
+              </Typography>
+              <Typography variant="body2" paragraph>
+                Confirm the installation details below and install the MCP tool.
+              </Typography>
+              
+              <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Installation Summary:
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={4}>
+                    <Typography variant="body2" color="text.secondary">Name:</Typography>
+                  </Grid>
+                  <Grid item xs={8}>
+                    <Typography variant="body2">{formData.name}</Typography>
+                  </Grid>
+                  
+                  <Grid item xs={4}>
+                    <Typography variant="body2" color="text.secondary">Repository:</Typography>
+                  </Grid>
+                  <Grid item xs={8}>
+                    <Typography variant="body2">{formData.sourceUrl}</Typography>
+                  </Grid>
+                  
+                  <Grid item xs={4}>
+                    <Typography variant="body2" color="text.secondary">Spaces:</Typography>
+                  </Grid>
+                  <Grid item xs={8}>
+                    <Typography variant="body2">
+                      {formData.spaces.length > 0 
+                        ? formData.spaces.join(', ') 
+                        : 'None (not accessible to users)'}
+                    </Typography>
+                  </Grid>
+                  
+                  <Grid item xs={4}>
+                    <Typography variant="body2" color="text.secondary">Config Parameters:</Typography>
+                  </Grid>
+                  <Grid item xs={8}>
+                    <Typography variant="body2">
+                      {Object.keys(formData.config).length > 0 
+                        ? Object.keys(formData.config).join(', ') 
+                        : 'None'}
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </Paper>
+              
+              <Alert severity="info" sx={{ mb: 3 }}>
+                The MCP tool will be installed and configured to work with Claude through the Model Context Protocol.
+                This enables Claude to use the tool's capabilities when answering user queries in the assigned spaces.
+              </Alert>
+            </Box>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog} disabled={loading}>
             Cancel
           </Button>
-          <Button
-            onClick={handleSaveTool}
-            variant="contained"
-            color="primary"
-            disabled={loading}
-            startIcon={loading && <CircularProgress size={20} />}
-          >
-            {editingTool && editingTool.id ? 'Update' : 'Install'}
-          </Button>
+          
+          {installationStep > 0 && (
+            <Button onClick={handlePrevStep} disabled={loading}>
+              Back
+            </Button>
+          )}
+          
+          {installationStep < steps.length - 1 ? (
+            <Button
+              onClick={handleNextStep}
+              variant="contained"
+              color="primary"
+              disabled={loading || (installationStep === 0 && !formData.sourceUrl)}
+              startIcon={loading && <CircularProgress size={20} />}
+            >
+              Next
+            </Button>
+          ) : (
+            <Button
+              onClick={handleSaveTool}
+              variant="contained"
+              color="primary"
+              disabled={loading}
+              startIcon={loading && <CircularProgress size={20} />}
+            >
+              Install Tool
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
     </div>
