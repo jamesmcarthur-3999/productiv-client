@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Grid, Box, Paper, Typography, Divider, IconButton } from '@mui/material';
+import { Grid, Box, Paper, Typography, Divider, IconButton, Chip } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
+import BuildIcon from '@mui/icons-material/Build';
 import { ChatMessage } from '../services/claude';
+import mcpService from '../services/mcpService';
 import ChatInterface from '../components/chat/ChatInterface';
 import ChatSidebar from '../components/chat/ChatSidebar';
 import { useSpaces } from '../context/SpaceContext';
+import { useMCPTools } from '../context/MCPToolContext';
 
 interface Conversation {
   id: number;
@@ -17,7 +20,10 @@ const ChatPage = () => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversation, setActiveConversation] = useState<number | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [availableMCPTools, setAvailableMCPTools] = useState<any[]>([]);
+  const [activeMCPTools, setActiveMCPTools] = useState<string[]>([]);
   const { currentSpace } = useSpaces();
+  const { getToolsForSpace } = useMCPTools();
 
   // Load conversations from localStorage or API on component mount
   useEffect(() => {
@@ -32,6 +38,30 @@ const ChatPage = () => {
   useEffect(() => {
     localStorage.setItem('conversations', JSON.stringify(conversations));
   }, [conversations]);
+
+  // Load available MCP tools for the current space
+  useEffect(() => {
+    const loadMCPTools = async () => {
+      if (!currentSpace) return;
+      
+      try {
+        // Get MCP tools from the service
+        const toolsData = await mcpService.getToolsForSpace(currentSpace.id);
+        setAvailableMCPTools(toolsData.flatMap(data => data.tools));
+        
+        // Get active tools from MCP Tool context
+        const activeTools = getToolsForSpace(currentSpace.name)
+          .filter(tool => tool.status === 'active')
+          .map(tool => tool.name);
+        
+        setActiveMCPTools(activeTools);
+      } catch (error) {
+        console.error('Error loading MCP tools:', error);
+      }
+    };
+    
+    loadMCPTools();
+  }, [currentSpace, getToolsForSpace]);
 
   const handleNewConversation = () => {
     const newConversation: Conversation = {
@@ -94,9 +124,28 @@ const ChatPage = () => {
       {/* Space header */}
       <Box sx={{ p: 2, bgcolor: '#f0f4f8', borderBottom: '1px solid #e0e0e0' }}>
         <Typography variant="h6">{currentSpace?.name || 'Default Space'}</Typography>
-        <Typography variant="body2" color="text.secondary">
-          Using specialized MCP tools for this space
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mr: 2 }}>
+            Available MCP Tools:
+          </Typography>
+          {activeMCPTools.length > 0 ? (
+            activeMCPTools.map((tool, index) => (
+              <Chip
+                key={index}
+                size="small"
+                label={tool}
+                icon={<BuildIcon fontSize="small" />}
+                color="primary"
+                variant="outlined"
+                sx={{ mr: 1 }}
+              />
+            ))
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              No active MCP tools for this space
+            </Typography>
+          )}
+        </Box>
       </Box>
 
       <Grid container sx={{ flexGrow: 1, overflow: 'hidden' }}>
@@ -163,6 +212,25 @@ const ChatPage = () => {
                   <Typography variant="body2" color="text.secondary">
                     This space has specialized MCP tools for {currentSpace?.name || 'your team'}.
                   </Typography>
+                  {availableMCPTools.length > 0 && (
+                    <Box sx={{ mt: 2 }}>
+                      <Typography variant="body2" fontWeight="bold">
+                        Available MCP Tools:
+                      </Typography>
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 1, mt: 1 }}>
+                        {availableMCPTools.map((tool, index) => (
+                          <Chip
+                            key={index}
+                            size="small"
+                            label={tool.name}
+                            icon={<BuildIcon fontSize="small" />}
+                            color="primary"
+                            variant="outlined"
+                          />
+                        ))}
+                      </Box>
+                    </Box>
+                  )}
                 </Paper>
               </Box>
             )}
